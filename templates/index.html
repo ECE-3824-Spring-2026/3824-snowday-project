@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>US Precipitation Monitor</title>
+  <style>
+    :root {
+      --bg:           #f0f4f8;
+      --card:         #ffffff;
+      --header-bg:    #0f2044;
+      --border:       #e5e7eb;
+      --muted:        #6b7280;
+      --accent:       #2563eb;
+      --precip-bg:    #fffbeb;
+      --precip-text:  #92400e;
+      --precip-border:#f59e0b;
+      --error-bg:     #fef2f2;
+      --error-text:   #991b1b;
+      --shadow:       0 1px 4px rgba(0,0,0,0.08);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: #1f2937;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--header-bg);
+      color: #fff;
+      padding: 1.1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+
+    header h1 { font-size: 1.25rem; font-weight: 600; }
+    header p  { font-size: 0.78rem; opacity: 0.55; margin-top: 0.2rem; }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .controls .meta { opacity: 0.65; }
+
+    #refresh-btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 0.45rem 1rem;
+      font-size: 0.82rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    #refresh-btn:hover    { opacity: 0.85; }
+    #refresh-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* ── Main ── */
+    main {
+      max-width: 1120px;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+    }
+
+    /* ── Summary cards ── */
+    .summary {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 8px;
+      padding: 1rem 1.4rem;
+      box-shadow: var(--shadow);
+      border-left: 4px solid transparent;
+      flex: 1;
+    }
+    .card.precip { border-color: #f59e0b; }
+    .card.clear  { border-color: #10b981; }
+    .card.errors { border-color: #ef4444; }
+
+    .card .count {
+      font-size: 2rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .card .label {
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-top: 0.3rem;
+    }
+
+    .card.precip .count { color: #d97706; }
+    .card.clear  .count { color: #059669; }
+    .card.errors .count { color: #dc2626; }
+
+    /* ── Table ── */
+    .table-wrap {
+      background: var(--card);
+      border-radius: 10px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    thead {
+      background: #f9fafb;
+      border-bottom: 2px solid var(--border);
+    }
+
+    th {
+      text-align: left;
+      padding: 0.8rem 1rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+
+    th:hover { color: #374151; background: #f3f4f6; }
+
+    th[data-sort]::after {
+      content: ' ⇅';
+      opacity: 0.35;
+      font-size: 0.7rem;
+    }
+    th.sort-asc::after  { content: ' ↑'; opacity: 1; color: var(--accent); }
+    th.sort-desc::after { content: ' ↓'; opacity: 1; color: var(--accent); }
+
+    td {
+      padding: 0.7rem 1rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: #f9fafb; }
+
+    tr.has-precip        { background: var(--precip-bg); }
+    tr.has-precip:hover  { background: #fef9e7; }
+    tr.has-error         { background: var(--error-bg); }
+    tr.has-error:hover   { background: #fde8e8; }
+
+    td.condition         { color: var(--muted); }
+    td.condition.precip  { color: var(--precip-text); font-weight: 600; }
+    td.condition.error   { color: var(--error-text); font-size: 0.8rem; }
+
+    td.station {
+      font-family: 'SF Mono', 'Consolas', monospace;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    td.temp, td.age {
+      color: var(--muted);
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .badge {
+      display: inline-block;
+      background: #fef3c7;
+      color: #92400e;
+      border: 1px solid #fcd34d;
+      border-radius: 4px;
+      padding: 0.05rem 0.4rem;
+      font-size: 0.68rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      margin-left: 0.5rem;
+      vertical-align: middle;
+    }
+
+    /* ── Loading overlay ── */
+    #loading {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 20, 50, 0.55);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 0.9rem;
+      color: #fff;
+    }
+    #loading.active { display: flex; }
+
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 4px solid rgba(255,255,255,0.25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-title { font-size: 1rem; font-weight: 500; }
+    .loading-sub   { font-size: 0.78rem; opacity: 0.6; }
+  </style>
+</head>
+<body>
+
+<!-- Loading overlay -->
+<div id="loading">
+  <div class="spinner"></div>
+  <div class="loading-title">Fetching live data from NWS for all 50 states…</div>
+  <div class="loading-sub">This takes about 15–30 seconds</div>
+</div>
+
+<!-- Header -->
+<header>
+  <div>
+    <h1>US Real-Time Precipitation Monitor</h1>
+    <p>Source: National Weather Service (weather.gov) &mdash; no API key required</p>
+  </div>
+  <div class="controls">
+    <span class="meta" id="last-updated"></span>
+    <span class="meta" id="next-refresh"></span>
+    <button id="refresh-btn" onclick="fetchWeather()">&#8635; Refresh</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- Summary cards -->
+  <div class="summary">
+    <div class="card precip">
+      <div class="count" id="precip-count">&mdash;</div>
+      <div class="label">States with precipitation</div>
+    </div>
+    <div class="card clear">
+      <div class="count" id="clear-count">&mdash;</div>
+      <div class="label">States clear</div>
+    </div>
+    <div class="card errors">
+      <div class="count" id="error-count">&mdash;</div>
+      <div class="label">Fetch errors</div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th data-sort="state">State</th>
+          <th data-sort="city">City</th>
+          <th data-sort="station">Station</th>
+          <th data-sort="condition">Condition</th>
+          <th data-sort="temp">Temp</th>
+          <th data-sort="observed">Observed</th>
+        </tr>
+      </thead>
+      <tbody id="table-body">
+        <tr>
+          <td colspan="6" style="text-align:center;padding:3rem;color:#9ca3af;">
+            Loading&hellip;
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+</main>
+
+<script>
+  const REFRESH_SECONDS = 5 * 60;
+  let countdownTimer = null;
+  let allResults     = [];
+  let sortKey        = 'state';
+  let sortDir        = 1; // 1 = asc, -1 = desc
+
+  // ── Fetch ────────────────────────────────────────────────────────────
+  async function fetchWeather() {
+    const btn     = document.getElementById('refresh-btn');
+    const loading = document.getElementById('loading');
+
+    btn.disabled = true;
+    loading.classList.add('active');
+    clearInterval(countdownTimer);
+    document.getElementById('next-refresh').textContent = '';
+
+    try {
+      const res  = await fetch('/api/weather');
+      const data = await res.json();
+      allResults = data.results;
+
+      document.getElementById('precip-count').textContent = data.precip_count;
+      document.getElementById('clear-count').textContent  = 50 - data.precip_count - data.error_count;
+      document.getElementById('error-count').textContent  = data.error_count;
+      document.getElementById('last-updated').textContent = `Updated: ${data.fetched_at}`;
+
+      renderRows();
+    } catch (err) {
+      document.getElementById('table-body').innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align:center;color:#dc2626;padding:2rem;">
+            Failed to fetch data: ${err.message}
+          </td>
+        </tr>`;
+    } finally {
+      btn.disabled = false;
+      loading.classList.remove('active');
+      startCountdown();
+    }
+  }
+
+  // ── Sort ─────────────────────────────────────────────────────────────
+  function sortValue(r, key) {
+    switch (key) {
+      case 'state':     return r.state.toLowerCase();
+      case 'city':      return r.city.toLowerCase();
+      case 'station':   return r.station.toLowerCase();
+      case 'condition': return r.condition.toLowerCase();
+      case 'temp':      return r.temp_f !== null ? r.temp_f : (sortDir === 1 ? Infinity : -Infinity);
+      case 'observed':  return r.obs_time ? new Date(r.obs_time).getTime() : 0;
+      default:          return '';
+    }
+  }
+
+  function sortBy(key) {
+    if (sortKey === key) {
+      sortDir = -sortDir;
+    } else {
+      sortKey = key;
+      sortDir = 1;
+    }
+    updateSortHeaders();
+    renderRows();
+  }
+
+  function updateSortHeaders() {
+    document.querySelectorAll('th[data-sort]').forEach(th => {
+      th.classList.remove('sort-asc', 'sort-desc');
+      if (th.dataset.sort === sortKey) {
+        th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
+      }
+    });
+  }
+
+  // ── Render ───────────────────────────────────────────────────────────
+  function renderRows() {
+    const sorted = [...allResults].sort((a, b) => {
+      const av = sortValue(a, sortKey);
+      const bv = sortValue(b, sortKey);
+      if (av < bv) return -sortDir;
+      if (av > bv) return  sortDir;
+      return 0;
+    });
+
+    document.getElementById('table-body').innerHTML = sorted.map(r => {
+      const isError  = !!r.error;
+      const isPrecip = r.has_precip && !isError;
+
+      const rowClass  = isError  ? 'has-error'  : isPrecip ? 'has-precip' : '';
+      const condClass = isError  ? 'condition error'
+                      : isPrecip ? 'condition precip'
+                      :            'condition';
+
+      const badge   = isPrecip ? '<span class="badge">PRECIP</span>' : '';
+      const tempStr = r.temp_f !== null ? `${r.temp_f}&deg;F` : '&mdash;';
+
+      return `
+        <tr class="${rowClass}">
+          <td><strong>${r.state}</strong></td>
+          <td>${r.city}</td>
+          <td class="station">${r.station}</td>
+          <td class="${condClass}">${r.condition}${badge}</td>
+          <td class="temp">${tempStr}</td>
+          <td class="age">${r.age}</td>
+        </tr>`;
+    }).join('');
+  }
+
+  // ── Countdown ────────────────────────────────────────────────────────
+  function startCountdown() {
+    let remaining = REFRESH_SECONDS;
+    countdownTimer = setInterval(() => {
+      remaining--;
+      const m = Math.floor(remaining / 60);
+      const s = String(remaining % 60).padStart(2, '0');
+      document.getElementById('next-refresh').textContent = `Auto-refresh in ${m}:${s}`;
+      if (remaining <= 0) {
+        clearInterval(countdownTimer);
+        fetchWeather();
+      }
+    }, 1000);
+  }
+
+  // ── Wire up header clicks ─────────────────────────────────────────────
+  document.querySelectorAll('th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => sortBy(th.dataset.sort));
+  });
+
+  // Load on page open
+  fetchWeather();
+  updateSortHeaders();
+</script>
+
+</body>
+</html>
